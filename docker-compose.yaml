@@ -1,0 +1,8 @@
+services:
+  mongodb:
+    image: mongo
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_DATABASE: app    
+    ports:
+      - 27017:27017

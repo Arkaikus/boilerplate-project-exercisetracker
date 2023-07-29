@@ -1,3 +1,5 @@
+// process.env.TZ = 'Europe/London';
+
 const bp = require('body-parser');
 const cors = require('cors')
 const express = require('express')
@@ -49,6 +51,13 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
+function format_date(date) {
+  // let fmted = date.toGMTString().slice(0, 16).replace(/,/g, '');
+  let fmted = date.toDateString();
+  console.log("date", date, "format_date", fmted, "toDateString", date.toDateString());
+  return fmted;
+}
+
 // Routes
 app.get('/', (req, res) => { res.sendFile(__dirname + '/views/index.html') });
 app.get("/api/users", (req, res) => {
@@ -61,6 +70,9 @@ app.post("/api/users", (req, res) => {
   /* creates an user from 'username' returns {'_id':, 'username'}*/
   const username = req.body.username;
   const newUser = new User({ username });
+
+  console.log("/api/users");
+  console.log("username:", username);
   newUser.save()
     .then(user => res.json({ _id: user._id, username: user.username }))
     .catch(err => res.status(500).json({ error: "Error creating user." }));
@@ -69,7 +81,25 @@ app.post("/api/users/:_id/exercises", (req, res) => {
   /*creates a user exercise from 'description','duration','date'?now*/
   const userId = req.params._id;
   const { description, duration, date } = req.body;
-  const exercise = { date: date || (new Date()).toDateString(), duration: parseInt(duration), description };
+
+  let _date = new Date();
+  const regex = /(\d{4})-(\d{2})-(\d{2})/;
+  const match = date?.match(regex) || false;
+  // console.log("match", match);
+  if (match) {
+    const year = match[1];
+    const month = match[2];
+    const day = match[3]; 
+    console.log(year, month, day)
+    _date = new Date(year, month-1, day);
+    console.log("parsed date", _date);
+  }
+
+  const exercise = { date: _date, duration: parseInt(duration), description };
+
+  console.log("/api/users/:_id/exercises");
+  console.log("userid:", userId, description, duration, date, "\nexercise:", exercise);
+
   User.findById(userId)
     .then(user => {
       if (!user) { throw new Error("User not found."); }
@@ -77,13 +107,25 @@ app.post("/api/users/:_id/exercises", (req, res) => {
       user.count = user.log.length;
       return user.save();
     })
-    .then(user => res.json({ _id: user._id, username: user.username, ...exercise }))
-    .catch(err => res.status(500).json({ error: "Error creating exercise." }));
+    .then(user => {
+      response = { _id: user._id, username: user.username, ...exercise }
+      // response.date = format_date(response.date);
+      response.date = response.date.toDateString();
+      console.log("response", response);
+      res.json(response)
+    })
+    .catch(err => {
+      console.log(err);
+      res.status(500).json({ error: "Error creating exercise." })
+    });
 });
-app.get("/api/users/:_id/logs", (req, res) => {/**
-  * returns a user's exercise log from 'from' and 'to' date or 'limit' entries */
+app.get("/api/users/:_id/logs", (req, res) => {
+  /* returns a user's exercise log from 'from' and 'to' date or 'limit' entries */
   const userId = req.params._id;
   const { from, to, limit } = req.query;
+
+  // console.log("/api/users/:_id/logs");
+  // console.log("userid:", userId, "from:", from, "to:", to, "limit:", limit);
 
   User.findById(userId)
     .then(user => {
@@ -99,14 +141,20 @@ app.get("/api/users/:_id/logs", (req, res) => {/**
       // Limit the number of logs if 'limit' is provided
       if (limit) { logs = logs.slice(0, parseInt(limit)); }
 
-      res.json({
+      response = {
         _id: user._id,
         username: user.username,
         count: logs.length,
         log: logs.map(log => ({ description: log.description, duration: log.duration, date: log.date.toDateString() }))
-      });
+      }
+
+      // console.log("Response", response);
+      res.json(response);
     })
-    .catch(err => res.status(500).json({ error: "Error fetching user logs." }));
+    .catch(err => {
+      console.log(err);
+      res.status(500).json({ error: "Error fetching user logs." })
+    });
 });
 
 
